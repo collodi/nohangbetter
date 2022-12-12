@@ -1,10 +1,12 @@
 import 'dart:async';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:stop_watch_timer/stop_watch_timer.dart';
+
+import 'scale_display.dart';
+import 'timer.dart';
 
 // TODO intermediate widget to make sure the location permission is granted for android
 
@@ -54,11 +56,26 @@ class _MyHomePageState extends State<MyHomePage> {
   late StreamSubscription<DiscoveredDevice> discover_sub;
   late StreamSubscription<ConnectionStateUpdate> conn_sub;
   late StreamSubscription<List<int>> listen_sub;
+  late StreamSubscription<bool> timer_stop_sub;
 
   int weight = 0;
   int weight_start = 0;
 
   final StopWatchTimer timer = StopWatchTimer();
+
+  @override
+  void initState() {
+    super.initState();
+
+    timer_stop_sub = timer.fetchStopped.listen((stopped) {
+      if (stopped) {
+        setState(() {
+          timer.onResetTimer();
+          weight_start = 0;
+        });
+      }
+    });
+  }
 
   Future<void> showPermissionDialog(BuildContext context) {
     return showDialog(
@@ -134,27 +151,26 @@ class _MyHomePageState extends State<MyHomePage> {
     print('received value');
     print(value);
 
-    int weight_jin =
-        (value[12] << 8) + value[11]; // TODO it's not always in jin
-    int weight_lbs = ((weight_jin / 200.0) * 2.2046).toInt();
-    print(weight_lbs);
+    int weightJin = (value[12] << 8) + value[11]; // TODO it's not always in jin
+    int weightLbs = ((weightJin / 200.0) * 2.2046).toInt();
+    print(weightLbs);
 
     setState(() {
-      weight = weight_lbs;
+      weight = weightLbs;
     });
   }
 
   // TODO location (and different bluetooth permissions?) permission with lower android versions
   Future<bool> confirmBlePermissions() async {
     await Permission.bluetoothScan.request();
-    bool scan_granted = await Permission.bluetoothScan.isGranted;
-    if (!scan_granted) {
+    bool scanGranted = await Permission.bluetoothScan.isGranted;
+    if (!scanGranted) {
       return false;
     }
 
     await Permission.bluetoothConnect.request();
-    bool conn_granted = await Permission.bluetoothScan.isGranted;
-    if (!conn_granted) {
+    bool connGranted = await Permission.bluetoothScan.isGranted;
+    if (!connGranted) {
       return false;
     }
 
@@ -166,6 +182,7 @@ class _MyHomePageState extends State<MyHomePage> {
     listen_sub.cancel();
     conn_sub.cancel();
     discover_sub.cancel();
+    timer_stop_sub.cancel();
     await timer.dispose();
 
     super.dispose();
@@ -179,23 +196,12 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
       body: Column(
         mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           WeightDisplay(weight),
           LoadDisplay(weight_start, weight),
           Expanded(
-            child: Center(
-              child: StreamBuilder<int>(
-                stream: timer.rawTime,
-                initialData: timer.rawTime.value,
-                builder: (context, snap) {
-                  final display = StopWatchTimer.getDisplayTime(snap.data!);
-                  return Text(
-                    display,
-                    style: const TextStyle(fontSize: 60),
-                  );
-                },
-              ),
-            ),
+            child: IntervalTimer(timer),
           ),
           ButtonBar(
             children: [
@@ -226,91 +232,6 @@ class _MyHomePageState extends State<MyHomePage> {
                 child: Text(timer.isRunning ? 'Stop' : 'Start'),
               ),
             ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class WeightDisplay extends StatelessWidget {
-  const WeightDisplay(this.weight, {Key? key}) : super(key: key);
-
-  final int weight;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
-        children: [
-          Text(
-            weight.toString(),
-            style: const TextStyle(fontSize: 50),
-          ),
-          const Text(
-            ' lbs',
-            style: TextStyle(fontSize: 20),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class LoadDisplay extends StatelessWidget {
-  const LoadDisplay(this.weight_start, this.weight, {Key? key})
-      : super(key: key);
-
-  final int weight_start;
-  final int weight;
-
-  @override
-  Widget build(BuildContext context) {
-    final int load = max(0, weight_start - weight);
-    final int load_perc =
-        weight_start > 0 ? (load / weight_start * 100).toInt() : 0;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  load.toString(),
-                  style: const TextStyle(fontSize: 50),
-                ),
-                const Text(
-                  ' lbs',
-                  style: TextStyle(fontSize: 20),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  load_perc.toString(),
-                  style: const TextStyle(fontSize: 50),
-                ),
-                const Text(
-                  ' %',
-                  style: TextStyle(fontSize: 20),
-                ),
-              ],
-            ),
           ),
         ],
       ),
