@@ -214,7 +214,7 @@ class _IntervalTimerState extends State<IntervalTimer> {
           return Column(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              const SizedBox(height: 30),
+              const SizedBox(height: 20),
               NumberInput(
                 nsets_controller,
                 init: nsets,
@@ -243,7 +243,7 @@ class _IntervalTimerState extends State<IntervalTimer> {
                 maxValue: 208860,
               ),
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: 30),
+                padding: const EdgeInsets.symmetric(horizontal: 30),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
@@ -262,7 +262,7 @@ class _IntervalTimerState extends State<IntervalTimer> {
                   ],
                 ),
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 20),
             ],
           );
         }
@@ -340,13 +340,17 @@ class _NumberInputState extends State<NumberInput> {
                       widget.controller.add(value);
                     });
                   },
+                  style: ElevatedButton.styleFrom(
+                    shape: const CircleBorder(),
+                    padding: const EdgeInsets.all(10),
+                  ),
                   child: const Text(
                     '-',
                     style: TextStyle(fontSize: 20),
                   ),
                 ),
                 onTapDown: (TapDownDetails details) {
-                  timer = Timer.periodic(const Duration(milliseconds: 65), (t) {
+                  timer = Timer.periodic(const Duration(milliseconds: 60), (t) {
                     setState(() {
                       value = max(value - 1, 0);
                       widget.controller.add(value);
@@ -381,13 +385,17 @@ class _NumberInputState extends State<NumberInput> {
                       widget.controller.add(value);
                     });
                   },
+                  style: ElevatedButton.styleFrom(
+                    shape: const CircleBorder(),
+                    padding: const EdgeInsets.all(10),
+                  ),
                   child: const Text(
                     '+',
                     style: TextStyle(fontSize: 20),
                   ),
                 ),
                 onTapDown: (TapDownDetails details) {
-                  timer = Timer.periodic(const Duration(milliseconds: 65), (t) {
+                  timer = Timer.periodic(const Duration(milliseconds: 60), (t) {
                     setState(() {
                       value = min(value + 1, widget.maxValue);
                       widget.controller.add(value);

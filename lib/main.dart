@@ -60,6 +60,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   int weight = 0;
   int weight_start = 0;
+  bool pin_weight = false;
 
   final StopWatchTimer timer = StopWatchTimer();
 
@@ -71,7 +72,6 @@ class _MyHomePageState extends State<MyHomePage> {
       if (stopped) {
         setState(() {
           timer.onResetTimer();
-          weight_start = 0;
         });
       }
     });
@@ -198,8 +198,60 @@ class _MyHomePageState extends State<MyHomePage> {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          WeightDisplay(weight),
-          LoadDisplay(weight_start, weight),
+          Padding(
+            padding: const EdgeInsets.all(5),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                const Text(
+                  'pin weight',
+                  style: TextStyle(fontSize: 20),
+                ),
+                Switch(
+                  value: pin_weight,
+                  onChanged: (value) {
+                    setState(() {
+                      pin_weight = value;
+                      weight_start = value ? weight : 0;
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 30),
+                  child: Icon(
+                    Icons.monitor_weight,
+                    size: 30,
+                  ),
+                ),
+                Expanded(
+                  child: WeightDisplay(weight),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 30),
+                  child: Icon(
+                    Icons.fitness_center,
+                    size: 30,
+                  ),
+                ),
+                LoadDisplayLbs(weight_start, weight),
+                LoadDisplayPerc(weight_start, weight),
+              ],
+            ),
+          ),
           Expanded(
             child: IntervalTimer(timer),
           ),
@@ -222,10 +274,8 @@ class _MyHomePageState extends State<MyHomePage> {
                   setState(() {
                     if (timer.isRunning) {
                       timer.onResetTimer();
-                      weight_start = 0;
                     } else {
                       timer.onStartTimer();
-                      weight_start = weight;
                     }
                   });
                 },
