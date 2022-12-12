@@ -12,17 +12,30 @@ class WeightDisplay extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
         children: [
-          Text(
-            weight.toString(),
-            style: const TextStyle(fontSize: 50),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 30),
+            child: Icon(
+              Icons.monitor_weight,
+              size: 30,
+            ),
           ),
-          const Text(
-            ' lbs',
-            style: TextStyle(fontSize: 20),
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  weight.toString(),
+                  style: const TextStyle(fontSize: 50),
+                ),
+                const Text(
+                  ' lbs',
+                  style: TextStyle(fontSize: 20),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -47,6 +60,13 @@ class LoadDisplay extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 30),
+            child: Icon(
+              Icons.fitness_center,
+              size: 30,
+            ),
+          ),
           Expanded(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
