@@ -7,6 +7,20 @@ import 'package:soundpool/soundpool.dart';
 import 'package:sprintf/sprintf.dart';
 import 'package:stop_watch_timer/stop_watch_timer.dart';
 
+enum IntervalStage {
+  prepare,
+  work,
+  rest,
+}
+
+class IntervalInfo {
+  int set;
+  IntervalStage stage;
+  int timeleft;
+
+  IntervalInfo(this.set, this.stage, this.timeleft);
+}
+
 class IntervalTimer extends StatefulWidget {
   const IntervalTimer(this.timer, {Key? key}) : super(key: key);
 
@@ -21,12 +35,13 @@ class _IntervalTimerState extends State<IntervalTimer> {
   int prepare = 5000;
   int work = 10000;
   int rest = 10000;
+  bool onearm = false;
 
   Soundpool pool = Soundpool.fromOptions(
     options: const SoundpoolOptions(streamType: StreamType.music),
   );
 
-  late int beepId;
+  late int beepId, beep2Id;
   late StreamSubscription<int> timer_sec_sub;
 
   late StreamSubscription<int> nsets_sub;
@@ -47,9 +62,18 @@ class _IntervalTimerState extends State<IntervalTimer> {
       beepId = await pool.load(soundData);
     });
 
+    rootBundle.load("sounds/doublebeep.wav").then((ByteData soundData) async {
+      beep2Id = await pool.load(soundData);
+    });
+
     timer_sec_sub = widget.timer.secondTime.listen((sec) {
-      int anyLeft = leftInAny(sec * 1000) ~/ 1000;
-      if (0 <= anyLeft && anyLeft <= 3) {
+      final info = getIntervalInfo(sec * 1000 - 1, onearm);
+      // minus 1 fixes a bug where timeleft for work is never 0
+      // which breaks the beep when work is finished
+      int timeleft = info.timeleft ~/ 1000;
+      if (timeleft == 0 && info.stage == IntervalStage.work) {
+        pool.play(beep2Id);
+      } else if (timeleft <= 3) {
         pool.play(beepId);
       }
     });
@@ -89,49 +113,89 @@ class _IntervalTimerState extends State<IntervalTimer> {
     super.dispose();
   }
 
-  int leftInPrepare(int time) {
-    return prepare - time;
+  IntervalInfo getIntervalInfo(int time, bool onearm) {
+    return onearm ? getIntervalInfoOneArm(time) : getIntervalInfoTwoArms(time);
   }
 
-  int leftInWork(int time) {
-    final int t = (time - prepare) % (work + rest);
-    return work - t;
-  }
-
-  int leftInRest(int time) {
-    final int t = (time - prepare - work) % (work + rest);
-    return rest - t;
-  }
-
-  int leftInAny(int time) {
-    final prepLeft = leftInPrepare(time);
-    if (prepLeft >= 0) {
-      return prepLeft;
+  int getCurrentSetOneArm(int time) {
+    if (time < 2 * (prepare + work)) {
+      return 0;
     }
 
-    final workLeft = leftInWork(time);
-    final restLeft = leftInRest(time);
+    time = time - 2 * (prepare + work);
+    return time ~/ (rest + 2 * work + prepare) + 1;
+  }
 
-    final minLeft = min(workLeft, restLeft);
-    if (minLeft >= 0) {
-      return minLeft;
+  IntervalInfo getIntervalInfoOneArm(int time) {
+    final set = getCurrentSetOneArm(time);
+    IntervalStage stage;
+    int timeleft;
+
+    if (set == 0) {
+      final timeInMiniSet = time % (prepare + work);
+      if (timeInMiniSet <= prepare) {
+        stage = IntervalStage.prepare;
+        timeleft = prepare - timeInMiniSet;
+      } else {
+        stage = IntervalStage.work;
+        timeleft = work - (timeInMiniSet - prepare);
+      }
+    } else {
+      final timeInSet =
+          (time - 2 * (prepare + work)) % (rest + 2 * work + prepare);
+
+      if (timeInSet <= rest) {
+        stage = IntervalStage.rest;
+        timeleft = rest - timeInSet;
+      } else if (timeInSet <= rest + work) {
+        stage = IntervalStage.work;
+        timeleft = work - (timeInSet - rest);
+      } else if (timeInSet <= rest + work + prepare) {
+        stage = IntervalStage.prepare;
+        timeleft = prepare - (timeInSet - rest - work);
+      } else {
+        stage = IntervalStage.work;
+        timeleft = work - (timeInSet - rest - work - prepare);
+      }
     }
 
-    return max(workLeft, restLeft);
+    return IntervalInfo(set, stage, timeleft);
   }
 
-  bool isDone(int time) {
-    final int finish = prepare + (work + rest) * nsets - rest;
-    return time >= finish;
-  }
-
-  int getCurrentSet(int time) {
+  int getCurrentSetTwoArms(int time) {
     if (time < prepare + work) {
-      return nsets;
+      return 0;
     }
 
     time = time - (prepare + work);
-    return nsets - time ~/ (work + rest) - 1;
+    return time ~/ (rest + work) + 1;
+  }
+
+  IntervalInfo getIntervalInfoTwoArms(int time) {
+    final set = getCurrentSetTwoArms(time);
+    IntervalStage stage;
+    int timeleft;
+
+    if (set == 0) {
+      if (time <= prepare) {
+        stage = IntervalStage.prepare;
+        timeleft = prepare - time;
+      } else {
+        stage = IntervalStage.work;
+        timeleft = work - (time - prepare);
+      }
+    } else {
+      final timeInSet = (time - (prepare + work)) % (work + rest);
+      if (timeInSet <= rest) {
+        stage = IntervalStage.rest;
+        timeleft = rest - timeInSet;
+      } else {
+        stage = IntervalStage.work;
+        timeleft = work - (timeInSet - rest);
+      }
+    }
+
+    return IntervalInfo(set, stage, timeleft);
   }
 
   @override
@@ -141,7 +205,11 @@ class _IntervalTimerState extends State<IntervalTimer> {
       initialData: widget.timer.rawTime.value,
       builder: (context, snap) {
         int time = snap.data!;
-        if (isDone(time) || !widget.timer.isRunning) {
+
+        IntervalInfo intervalInfo = getIntervalInfo(time, onearm);
+        int setLeft = nsets - intervalInfo.set;
+
+        if (setLeft == 0 || !widget.timer.isRunning) {
           widget.timer.onStopTimer();
           return Column(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -151,7 +219,7 @@ class _IntervalTimerState extends State<IntervalTimer> {
                 nsets_controller,
                 init: nsets,
                 label: 'sets',
-                maxValue: 20,
+                maxValue: 99,
               ),
               NumberInput(
                 prep_controller,
@@ -174,25 +242,43 @@ class _IntervalTimerState extends State<IntervalTimer> {
                 timeFormat: true,
                 maxValue: 208860,
               ),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 30),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    const Text(
+                      'one arm',
+                      style: TextStyle(fontSize: 25),
+                    ),
+                    Switch(
+                      value: onearm,
+                      onChanged: (val) {
+                        setState(() {
+                          onearm = val;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 30),
             ],
           );
         }
 
-        int set = getCurrentSet(time);
+        const displayColors = [
+          Colors.amber,
+          Colors.lightGreen,
+          Colors.lightBlue,
+        ];
 
-        int prepLeft = leftInPrepare(time);
-        if (prepLeft > 0) {
-          return TimerDisplay(Colors.amber, "prepare", prepLeft, set);
-        }
-
-        int workLeft = leftInWork(time);
-        if (workLeft > 0) {
-          return TimerDisplay(Colors.lightGreen, "work", workLeft, set);
-        }
-
-        int restLeft = leftInRest(time);
-        return TimerDisplay(Colors.lightBlue, "rest", restLeft, set);
+        return TimerDisplay(
+          displayColors[intervalInfo.stage.index],
+          intervalInfo.stage.name,
+          intervalInfo.timeleft,
+          setLeft,
+        );
       },
     );
   }
@@ -219,6 +305,7 @@ class NumberInput extends StatefulWidget {
 
 class _NumberInputState extends State<NumberInput> {
   late int value;
+  late Timer timer;
 
   @override
   void initState() {
@@ -243,16 +330,35 @@ class _NumberInputState extends State<NumberInput> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  value = max(value - 1, 0);
-                  widget.controller.add(value);
-                });
-              },
-              child: const Text(
-                '-',
-                style: TextStyle(fontSize: 20),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 30),
+              child: GestureDetector(
+                child: ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      value = max(value - 1, 0);
+                      widget.controller.add(value);
+                    });
+                  },
+                  child: const Text(
+                    '-',
+                    style: TextStyle(fontSize: 20),
+                  ),
+                ),
+                onTapDown: (TapDownDetails details) {
+                  timer = Timer.periodic(const Duration(milliseconds: 65), (t) {
+                    setState(() {
+                      value = max(value - 1, 0);
+                      widget.controller.add(value);
+                    });
+                  });
+                },
+                onTapUp: (TapUpDetails details) {
+                  timer.cancel();
+                },
+                onTapCancel: () {
+                  timer.cancel();
+                },
               ),
             ),
             if (widget.timeFormat)
@@ -265,16 +371,35 @@ class _NumberInputState extends State<NumberInput> {
                 value.toString(),
                 style: const TextStyle(fontSize: 25),
               ),
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  value = min(value + 1, widget.maxValue);
-                  widget.controller.add(value);
-                });
-              },
-              child: const Text(
-                '+',
-                style: TextStyle(fontSize: 20),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 30),
+              child: GestureDetector(
+                child: ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      value = min(value + 1, widget.maxValue);
+                      widget.controller.add(value);
+                    });
+                  },
+                  child: const Text(
+                    '+',
+                    style: TextStyle(fontSize: 20),
+                  ),
+                ),
+                onTapDown: (TapDownDetails details) {
+                  timer = Timer.periodic(const Duration(milliseconds: 65), (t) {
+                    setState(() {
+                      value = min(value + 1, widget.maxValue);
+                      widget.controller.add(value);
+                    });
+                  });
+                },
+                onTapUp: (TapUpDetails details) {
+                  timer.cancel();
+                },
+                onTapCancel: () {
+                  timer.cancel();
+                },
               ),
             ),
           ],

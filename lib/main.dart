@@ -208,15 +208,15 @@ class _MyHomePageState extends State<MyHomePage> {
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.all(20),
-                  textStyle: const TextStyle(fontSize: 18),
+                  textStyle: const TextStyle(fontSize: 20),
                 ),
                 onPressed: () => scanForScale(context),
-                child: const Text('Connect To Scale'),
+                child: const Text('connect to scale'),
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.all(20),
-                  textStyle: const TextStyle(fontSize: 18),
+                  textStyle: const TextStyle(fontSize: 20),
                 ),
                 onPressed: () {
                   setState(() {
@@ -229,7 +229,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     }
                   });
                 },
-                child: Text(timer.isRunning ? 'Stop' : 'Start'),
+                child: Text(timer.isRunning ? 'stop' : 'start'),
               ),
             ],
           ),
