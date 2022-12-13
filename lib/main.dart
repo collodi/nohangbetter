@@ -53,16 +53,21 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   final ble = FlutterReactiveBle();
-  late StreamSubscription<DiscoveredDevice> discover_sub;
-  late StreamSubscription<ConnectionStateUpdate> conn_sub;
-  late StreamSubscription<List<int>> listen_sub;
-  late StreamSubscription<bool> timer_stop_sub;
+
+  StreamSubscription<DiscoveredDevice>? discover_sub;
+  StreamSubscription<ConnectionStateUpdate>? conn_sub;
+  StreamSubscription<ConnectionStateUpdate>? disconn_sub;
+  StreamSubscription<List<int>>? listen_sub;
 
   int weight = 0;
   int weight_start = 0;
   bool pin_weight = false;
 
+  bool conn_btn_enable = true;
+  String conn_text = 'connect to scale';
+
   final StopWatchTimer timer = StopWatchTimer();
+  late StreamSubscription<bool> timer_stop_sub;
 
   @override
   void initState() {
@@ -75,6 +80,26 @@ class _MyHomePageState extends State<MyHomePage> {
         });
       }
     });
+  }
+
+  @override
+  void dispose() async {
+    if (listen_sub != null) {
+      listen_sub!.cancel();
+    }
+    if (conn_sub != null) {
+      conn_sub!.cancel();
+    }
+    if (disconn_sub != null) {
+      disconn_sub!.cancel();
+    }
+    if (discover_sub != null) {
+      discover_sub!.cancel();
+    }
+    timer_stop_sub.cancel();
+    await timer.dispose();
+
+    super.dispose();
   }
 
   Future<void> showPermissionDialog(BuildContext context) {
@@ -105,14 +130,26 @@ class _MyHomePageState extends State<MyHomePage> {
         return;
       }
 
+      setState(() {
+        conn_btn_enable = false;
+        conn_text = 'searching for scale';
+      });
+
       discover_sub = ble.scanForDevices(
-          withServices: [BODY_COMP_SERVICE],
-          scanMode: ScanMode.lowLatency,
-          requireLocationServicesEnabled: true).listen((device) {
+        withServices: [BODY_COMP_SERVICE],
+        scanMode: ScanMode.lowLatency,
+        requireLocationServicesEnabled: true,
+      ).listen((device) {
         connectToScale(device);
       }, onError: (obj) {
-        print('error!');
+        print('bt scan error!');
         print(obj);
+        // TODO toast 'failed to scan for scale'
+
+        setState(() {
+          conn_btn_enable = false;
+          conn_text = 'searching for scale';
+        });
       });
     });
   }
@@ -123,37 +160,52 @@ class _MyHomePageState extends State<MyHomePage> {
   // });
 
   void connectToScale(DiscoveredDevice device) {
-    print(device);
-    discover_sub.pause();
+    discover_sub!.cancel();
+    setState(() {
+      conn_btn_enable = false;
+      conn_text = 'connecting';
+    });
+
+    if (conn_sub != null) {
+      conn_sub!.cancel();
+    }
 
     conn_sub = ble.connectToDevice(id: device.id).listen((stat) {
       print(stat);
 
       if (stat.connectionState == DeviceConnectionState.connected) {
-        print('connected to the weight scale!');
+        setState(() {
+          conn_btn_enable = false;
+          conn_text = 'connected';
+        });
 
         final characteristic = QualifiedCharacteristic(
             characteristicId: WEIGHT_MEASUREMENT_CHAR,
             serviceId: BODY_COMP_SERVICE,
             deviceId: stat.deviceId);
 
+        if (listen_sub != null) {
+          listen_sub!.cancel();
+        }
+
         listen_sub =
             ble.subscribeToCharacteristic(characteristic).listen(listenToScale);
-      } else if (stat.connectionState != DeviceConnectionState.connecting) {
-        listen_sub.cancel();
-        conn_sub.cancel();
-        discover_sub.resume();
+      } else if (stat.connectionState == DeviceConnectionState.disconnected &&
+          listen_sub != null) {
+        listen_sub!.cancel();
+        listen_sub = null;
+
+        setState(() {
+          conn_btn_enable = true;
+          conn_text = 'connect to scale';
+        });
       }
     });
   }
 
   void listenToScale(value) {
-    print('received value');
-    print(value);
-
     int weightJin = (value[12] << 8) + value[11]; // TODO it's not always in jin
     int weightLbs = ((weightJin / 200.0) * 2.2046).toInt();
-    print(weightLbs);
 
     setState(() {
       weight = weightLbs;
@@ -175,17 +227,6 @@ class _MyHomePageState extends State<MyHomePage> {
     }
 
     return true;
-  }
-
-  @override
-  void dispose() async {
-    listen_sub.cancel();
-    conn_sub.cancel();
-    discover_sub.cancel();
-    timer_stop_sub.cancel();
-    await timer.dispose();
-
-    super.dispose();
   }
 
   @override
@@ -262,8 +303,8 @@ class _MyHomePageState extends State<MyHomePage> {
                   padding: const EdgeInsets.all(20),
                   textStyle: const TextStyle(fontSize: 20),
                 ),
-                onPressed: () => scanForScale(context),
-                child: const Text('connect to scale'),
+                onPressed: conn_btn_enable ? () => scanForScale(context) : null,
+                child: Text(conn_text),
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
