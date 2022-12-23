@@ -1,14 +1,16 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:device_info/device_info.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_donation_buttons/donationButtons/patreonButton.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:stop_watch_timer/stop_watch_timer.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 
 import 'scale_display.dart';
 import 'timer.dart';
-
-// TODO intermediate widget to make sure the location permission is granted for android
 
 final Uuid BODY_COMP_SERVICE =
     Uuid.parse('0000181b-0000-1000-8000-00805f9b34fb');
@@ -20,6 +22,8 @@ final Uuid BODY_COMP_MEASUREMENT_CHAR =
     Uuid.parse('00002a9c-0000-1000-8000-00805f9b34fb');
 final Uuid WEIGHT_MEASUREMENT_CHAR =
     Uuid.parse('00002a9c-0000-1000-8000-00805f9b34fb');
+
+const website_url = "https://willy.kim";
 
 void main() {
   runApp(const MyApp());
@@ -35,35 +39,133 @@ class MyApp extends StatelessWidget {
       title: 'Flutter Demo',
       theme: ThemeData(
         brightness: Brightness.dark,
-        primarySwatch: Colors.indigo,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const StartPage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+class StartPage extends StatelessWidget {
+  const StartPage({Key? key}) : super(key: key);
 
-  final String title;
+  Future<void> alertCantOpenWebsite(BuildContext context) {
+    return showDialog(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('Error'),
+            content: const Text('Sorry, I can\'t open the website.'),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('ok'),
+              ),
+            ],
+          );
+        });
+  }
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              const CircleAvatar(
+                radius: 100,
+                backgroundImage: AssetImage('images/my_photo.jpg'),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(30),
+                child: RichText(
+                  textAlign: TextAlign.center,
+                  text: const TextSpan(
+                    style: TextStyle(fontSize: 20),
+                    text: 'Hi! My name is Willy.'
+                        '\n\n'
+                        'If you like this app, check out my other ideas on my website.'
+                        '\n\n'
+                        'If you want to support accessible open-source climbing technologies, please visit my Patreon.',
+                  ),
+                ),
+              ),
+              Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 30),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(50),
+                      ),
+                      onPressed: () async {
+                        if (await canLaunchUrlString(website_url)) {
+                          await launchUrlString(website_url);
+                        } else {
+                          alertCantOpenWebsite(context);
+                        }
+                      },
+                      child: const Text('Check Out My Website'),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 30),
+                    child: PatreonButton(
+                      patreonName: 'willykim',
+                      text: 'Support Me On Patreon',
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 30),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(70),
+                      ),
+                      onPressed: () {
+                        Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) => const MainPage()));
+                      },
+                      child: const Text('Start App'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-class _MyHomePageState extends State<MyHomePage> {
+class MainPage extends StatefulWidget {
+  const MainPage({super.key});
+
+  @override
+  State<MainPage> createState() => _MainPageState();
+}
+
+class _MainPageState extends State<MainPage> {
   final ble = FlutterReactiveBle();
 
   StreamSubscription<DiscoveredDevice>? discover_sub;
   StreamSubscription<ConnectionStateUpdate>? conn_sub;
-  StreamSubscription<ConnectionStateUpdate>? disconn_sub;
   StreamSubscription<List<int>>? listen_sub;
+  StreamSubscription<BleStatus>? btstat_sub;
 
   int weight = 0;
   int weight_start = 0;
   bool pin_weight = false;
 
+  bool bt_ready = true;
   bool conn_btn_enable = true;
+  bool conn_loading = false;
   String conn_text = 'connect to scale';
 
   final StopWatchTimer timer = StopWatchTimer();
@@ -80,6 +182,44 @@ class _MyHomePageState extends State<MyHomePage> {
         });
       }
     });
+
+    btstat_sub = ble.statusStream.listen((stat) {
+      bt_ready = false;
+      switch (stat) {
+        case BleStatus.locationServicesDisabled:
+          setState(() {
+            conn_btn_enable = false;
+            conn_text = 'location disabled';
+            conn_loading = false;
+          });
+          break;
+        case BleStatus.poweredOff:
+          setState(() {
+            conn_btn_enable = false;
+            conn_text = 'bluetooth off';
+            conn_loading = false;
+          });
+          break;
+        case BleStatus.ready:
+        case BleStatus.unauthorized: // taken care thru popup
+          bt_ready = true;
+          setState(() {
+            conn_btn_enable = true;
+            conn_text = 'connect to scale';
+            conn_loading = false;
+          });
+          break;
+        case BleStatus.unsupported:
+          setState(() {
+            conn_btn_enable = false;
+            conn_text = 'bluetooth unsupported';
+            conn_loading = false;
+          });
+          break;
+        default:
+          break;
+      }
+    });
   }
 
   @override
@@ -90,11 +230,11 @@ class _MyHomePageState extends State<MyHomePage> {
     if (conn_sub != null) {
       conn_sub!.cancel();
     }
-    if (disconn_sub != null) {
-      disconn_sub!.cancel();
-    }
     if (discover_sub != null) {
       discover_sub!.cancel();
+    }
+    if (btstat_sub != null) {
+      btstat_sub!.cancel();
     }
     timer_stop_sub.cancel();
     await timer.dispose();
@@ -107,24 +247,26 @@ class _MyHomePageState extends State<MyHomePage> {
         context: context,
         builder: (context) {
           return AlertDialog(
-            title: const Text('Connection Failed'),
+            title: const Text('Permissions Required'),
             content: const Text(
-                'The permissions are needed for the app to communicate with the weight scale.\n'
-                'You can change the permissions in the app settings.'),
+                'The permissions are required to communicate with the weight scale. '
+                'You can grant permissions in the app settings.'),
             actions: <Widget>[
               TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Ok')),
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('ok'),
+              ),
               TextButton(
-                  onPressed: () => openAppSettings(),
-                  child: const Text('Go To Settings'))
+                onPressed: () => openAppSettings(),
+                child: const Text('open settings'),
+              )
             ],
           );
         });
   }
 
   void scanForScale(BuildContext context) {
-    confirmBlePermissions().then((pstat) {
+    confirmPermissions().then((pstat) {
       if (!pstat) {
         showPermissionDialog(context);
         return;
@@ -133,6 +275,7 @@ class _MyHomePageState extends State<MyHomePage> {
       setState(() {
         conn_btn_enable = false;
         conn_text = 'searching for scale';
+        conn_loading = true;
       });
 
       discover_sub = ble.scanForDevices(
@@ -142,13 +285,17 @@ class _MyHomePageState extends State<MyHomePage> {
       ).listen((device) {
         connectToScale(device);
       }, onError: (obj) {
-        print('bt scan error!');
-        print(obj);
-        // TODO toast 'failed to scan for scale'
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('bluetooth scan failed'),
+            padding: EdgeInsets.all(20),
+          ),
+        );
 
         setState(() {
-          conn_btn_enable = false;
-          conn_text = 'searching for scale';
+          conn_btn_enable = true;
+          conn_text = 'connect to scale';
+          conn_loading = false;
         });
       });
     });
@@ -164,6 +311,7 @@ class _MyHomePageState extends State<MyHomePage> {
     setState(() {
       conn_btn_enable = false;
       conn_text = 'connecting';
+      conn_loading = true;
     });
 
     if (conn_sub != null) {
@@ -177,6 +325,7 @@ class _MyHomePageState extends State<MyHomePage> {
         setState(() {
           conn_btn_enable = false;
           conn_text = 'connected';
+          conn_loading = false;
         });
 
         final characteristic = QualifiedCharacteristic(
@@ -196,8 +345,11 @@ class _MyHomePageState extends State<MyHomePage> {
         listen_sub = null;
 
         setState(() {
-          conn_btn_enable = true;
-          conn_text = 'connect to scale';
+          if (bt_ready) {
+            conn_btn_enable = true;
+            conn_text = 'connect to scale';
+            conn_loading = false;
+          }
         });
       }
     });
@@ -212,8 +364,26 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  // TODO location (and different bluetooth permissions?) permission with lower android versions
-  Future<bool> confirmBlePermissions() async {
+  Future<bool> confirmPermissions() async {
+    if (Platform.isAndroid) {
+      final info = await DeviceInfoPlugin().androidInfo;
+      if (info.version.sdkInt < 31) {
+        await Permission.locationWhenInUse.request();
+        bool locationGranted = await Permission.locationWhenInUse.isGranted;
+        if (!locationGranted) {
+          return false;
+        }
+
+        await Permission.bluetooth.request();
+        bool btGranted = await Permission.bluetooth.isGranted;
+        if (!btGranted) {
+          return false;
+        }
+
+        return true;
+      }
+    }
+
     await Permission.bluetoothScan.request();
     bool scanGranted = await Permission.bluetoothScan.isGranted;
     if (!scanGranted) {
@@ -232,99 +402,115 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-      ),
-      body: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(5),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+      body: SafeArea(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(5),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  const Text(
+                    'pin weight',
+                    style: TextStyle(fontSize: 20),
+                  ),
+                  Switch(
+                    value: pin_weight,
+                    onChanged: (value) {
+                      setState(() {
+                        pin_weight = value;
+                        weight_start = value ? weight : 0;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 30),
+                    child: Icon(
+                      Icons.monitor_weight,
+                      size: 30,
+                    ),
+                  ),
+                  Expanded(
+                    child: WeightDisplay(weight),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 30),
+                    child: Icon(
+                      Icons.fitness_center,
+                      size: 30,
+                    ),
+                  ),
+                  LoadDisplayLbs(weight_start, weight),
+                  LoadDisplayPerc(weight_start, weight),
+                ],
+              ),
+            ),
+            Expanded(
+              child: IntervalTimer(timer),
+            ),
+            ButtonBar(
               children: [
-                const Text(
-                  'pin weight',
-                  style: TextStyle(fontSize: 20),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.all(20),
+                    textStyle: const TextStyle(fontSize: 20),
+                  ),
+                  onPressed:
+                      conn_btn_enable ? () => scanForScale(context) : null,
+                  child: Row(
+                    children: [
+                      if (conn_loading)
+                        const Padding(
+                          padding: EdgeInsets.fromLTRB(0, 0, 10, 0),
+                          child: SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          ),
+                        ),
+                      Text(conn_text),
+                    ],
+                  ),
                 ),
-                Switch(
-                  value: pin_weight,
-                  onChanged: (value) {
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.all(20),
+                    textStyle: const TextStyle(fontSize: 20),
+                  ),
+                  onPressed: () {
                     setState(() {
-                      pin_weight = value;
-                      weight_start = value ? weight : 0;
+                      if (timer.isRunning) {
+                        timer.onResetTimer();
+                      } else {
+                        timer.onStartTimer();
+                      }
                     });
                   },
+                  child: Text(timer.isRunning ? 'stop' : 'start'),
                 ),
               ],
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Row(
-              children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 30),
-                  child: Icon(
-                    Icons.monitor_weight,
-                    size: 30,
-                  ),
-                ),
-                Expanded(
-                  child: WeightDisplay(weight),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Row(
-              children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 30),
-                  child: Icon(
-                    Icons.fitness_center,
-                    size: 30,
-                  ),
-                ),
-                LoadDisplayLbs(weight_start, weight),
-                LoadDisplayPerc(weight_start, weight),
-              ],
-            ),
-          ),
-          Expanded(
-            child: IntervalTimer(timer),
-          ),
-          ButtonBar(
-            children: [
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.all(20),
-                  textStyle: const TextStyle(fontSize: 20),
-                ),
-                onPressed: conn_btn_enable ? () => scanForScale(context) : null,
-                child: Text(conn_text),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.all(20),
-                  textStyle: const TextStyle(fontSize: 20),
-                ),
-                onPressed: () {
-                  setState(() {
-                    if (timer.isRunning) {
-                      timer.onResetTimer();
-                    } else {
-                      timer.onStartTimer();
-                    }
-                  });
-                },
-                child: Text(timer.isRunning ? 'stop' : 'start'),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

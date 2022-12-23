@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:soundpool/soundpool.dart';
 import 'package:sprintf/sprintf.dart';
 import 'package:stop_watch_timer/stop_watch_timer.dart';
@@ -21,6 +22,48 @@ class IntervalInfo {
   IntervalInfo(this.set, this.stage, this.timeleft);
 }
 
+class TimerSetting {
+  int nsets;
+  int prepare;
+  int work;
+  int rest;
+  bool onearm;
+
+  TimerSetting(this.nsets, this.prepare, this.work, this.rest, this.onearm);
+}
+
+Future<TimerSetting> getTimerSetting() async {
+  final prefs = await SharedPreferences.getInstance();
+
+  final nsets = await prefs.getInt('nsets');
+  final prepare = await prefs.getInt('prepare');
+  final work = await prefs.getInt('work');
+  final rest = await prefs.getInt('rest');
+  final onearm = await prefs.getBool('onearm');
+
+  return TimerSetting(
+    nsets ?? 5,
+    prepare ?? 5000,
+    work ?? 10000,
+    rest ?? 10000,
+    onearm ?? false,
+  );
+}
+
+TimerSetting defaultTimerSetting() {
+  return TimerSetting(5, 5000, 10000, 10000, false);
+}
+
+Future<void> storeTimerSetting(TimerSetting ts) async {
+  final prefs = await SharedPreferences.getInstance();
+
+  await prefs.setInt('nsets', ts.nsets);
+  await prefs.setInt('prepare', ts.prepare);
+  await prefs.setInt('work', ts.work);
+  await prefs.setInt('rest', ts.rest);
+  await prefs.setBool('onearm', ts.onearm);
+}
+
 class IntervalTimer extends StatefulWidget {
   const IntervalTimer(this.timer, {Key? key}) : super(key: key);
 
@@ -31,11 +74,7 @@ class IntervalTimer extends StatefulWidget {
 }
 
 class _IntervalTimerState extends State<IntervalTimer> {
-  int nsets = 2;
-  int prepare = 5000;
-  int work = 10000;
-  int rest = 10000;
-  bool onearm = false;
+  TimerSetting ts = defaultTimerSetting();
 
   Soundpool pool = Soundpool.fromOptions(
     options: const SoundpoolOptions(streamType: StreamType.music),
@@ -67,7 +106,7 @@ class _IntervalTimerState extends State<IntervalTimer> {
     });
 
     timer_sec_sub = widget.timer.secondTime.listen((sec) {
-      final info = getIntervalInfo(sec * 1000 - 1, onearm);
+      final info = getIntervalInfo(sec * 1000 - 1, ts.onearm);
       // minus 1 fixes a bug where timeleft for work is never 0
       // which breaks the beep when work is finished
       int timeleft = info.timeleft ~/ 1000;
@@ -79,19 +118,23 @@ class _IntervalTimerState extends State<IntervalTimer> {
     });
 
     nsets_sub = nsets_controller.stream.listen((value) {
-      nsets = value;
+      ts.nsets = value;
+      storeTimerSetting(ts);
     });
 
     prep_sub = prep_controller.stream.listen((value) {
-      prepare = value * 1000;
+      ts.prepare = value * 1000;
+      storeTimerSetting(ts);
     });
 
     work_sub = work_controller.stream.listen((value) {
-      work = value * 1000;
+      ts.work = value * 1000;
+      storeTimerSetting(ts);
     });
 
     rest_sub = rest_controller.stream.listen((value) {
-      rest = value * 1000;
+      ts.rest = value * 1000;
+      storeTimerSetting(ts);
     });
   }
 
@@ -118,12 +161,12 @@ class _IntervalTimerState extends State<IntervalTimer> {
   }
 
   int getCurrentSetOneArm(int time) {
-    if (time < 2 * (prepare + work)) {
+    if (time < 2 * (ts.prepare + ts.work)) {
       return 0;
     }
 
-    time = time - 2 * (prepare + work);
-    return time ~/ (rest + 2 * work + prepare) + 1;
+    time = time - 2 * (ts.prepare + ts.work);
+    return time ~/ (ts.rest + 2 * ts.work + ts.prepare) + 1;
   }
 
   IntervalInfo getIntervalInfoOneArm(int time) {
@@ -132,30 +175,30 @@ class _IntervalTimerState extends State<IntervalTimer> {
     int timeleft;
 
     if (set == 0) {
-      final timeInMiniSet = time % (prepare + work);
-      if (timeInMiniSet <= prepare) {
+      final timeInMiniSet = time % (ts.prepare + ts.work);
+      if (timeInMiniSet <= ts.prepare) {
         stage = IntervalStage.prepare;
-        timeleft = prepare - timeInMiniSet;
+        timeleft = ts.prepare - timeInMiniSet;
       } else {
         stage = IntervalStage.work;
-        timeleft = work - (timeInMiniSet - prepare);
+        timeleft = ts.work - (timeInMiniSet - ts.prepare);
       }
     } else {
-      final timeInSet =
-          (time - 2 * (prepare + work)) % (rest + 2 * work + prepare);
+      final timeInSet = (time - 2 * (ts.prepare + ts.work)) %
+          (ts.rest + 2 * ts.work + ts.prepare);
 
-      if (timeInSet <= rest) {
+      if (timeInSet <= ts.rest) {
         stage = IntervalStage.rest;
-        timeleft = rest - timeInSet;
-      } else if (timeInSet <= rest + work) {
+        timeleft = ts.rest - timeInSet;
+      } else if (timeInSet <= ts.rest + ts.work) {
         stage = IntervalStage.work;
-        timeleft = work - (timeInSet - rest);
-      } else if (timeInSet <= rest + work + prepare) {
+        timeleft = ts.work - (timeInSet - ts.rest);
+      } else if (timeInSet <= ts.rest + ts.work + ts.prepare) {
         stage = IntervalStage.prepare;
-        timeleft = prepare - (timeInSet - rest - work);
+        timeleft = ts.prepare - (timeInSet - ts.rest - ts.work);
       } else {
         stage = IntervalStage.work;
-        timeleft = work - (timeInSet - rest - work - prepare);
+        timeleft = ts.work - (timeInSet - ts.rest - ts.work - ts.prepare);
       }
     }
 
@@ -163,12 +206,12 @@ class _IntervalTimerState extends State<IntervalTimer> {
   }
 
   int getCurrentSetTwoArms(int time) {
-    if (time < prepare + work) {
+    if (time < ts.prepare + ts.work) {
       return 0;
     }
 
-    time = time - (prepare + work);
-    return time ~/ (rest + work) + 1;
+    time = time - (ts.prepare + ts.work);
+    return time ~/ (ts.rest + ts.work) + 1;
   }
 
   IntervalInfo getIntervalInfoTwoArms(int time) {
@@ -177,21 +220,21 @@ class _IntervalTimerState extends State<IntervalTimer> {
     int timeleft;
 
     if (set == 0) {
-      if (time <= prepare) {
+      if (time <= ts.prepare) {
         stage = IntervalStage.prepare;
-        timeleft = prepare - time;
+        timeleft = ts.prepare - time;
       } else {
         stage = IntervalStage.work;
-        timeleft = work - (time - prepare);
+        timeleft = ts.work - (time - ts.prepare);
       }
     } else {
-      final timeInSet = (time - (prepare + work)) % (work + rest);
-      if (timeInSet <= rest) {
+      final timeInSet = (time - (ts.prepare + ts.work)) % (ts.work + ts.rest);
+      if (timeInSet <= ts.rest) {
         stage = IntervalStage.rest;
-        timeleft = rest - timeInSet;
+        timeleft = ts.rest - timeInSet;
       } else {
         stage = IntervalStage.work;
-        timeleft = work - (timeInSet - rest);
+        timeleft = ts.work - (timeInSet - ts.rest);
       }
     }
 
@@ -200,84 +243,99 @@ class _IntervalTimerState extends State<IntervalTimer> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<int>(
-      stream: widget.timer.rawTime,
-      initialData: widget.timer.rawTime.value,
+    return FutureBuilder(
+      future: getTimerSetting(),
       builder: (context, snap) {
-        int time = snap.data!;
-
-        IntervalInfo intervalInfo = getIntervalInfo(time, onearm);
-        int setLeft = nsets - intervalInfo.set;
-
-        if (setLeft == 0 || !widget.timer.isRunning) {
-          widget.timer.onStopTimer();
-          return Column(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              const SizedBox(height: 20),
-              NumberInput(
-                nsets_controller,
-                init: nsets,
-                label: 'sets',
-                maxValue: 99,
-              ),
-              NumberInput(
-                prep_controller,
-                label: 'prepare',
-                init: prepare ~/ 1000,
-                timeFormat: true,
-                maxValue: 208860,
-              ),
-              NumberInput(
-                work_controller,
-                label: 'work',
-                init: work ~/ 1000,
-                timeFormat: true,
-                maxValue: 208860,
-              ),
-              NumberInput(
-                rest_controller,
-                label: 'rest',
-                init: rest ~/ 1000,
-                timeFormat: true,
-                maxValue: 208860,
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 30),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    const Text(
-                      'one arm',
-                      style: TextStyle(fontSize: 25),
-                    ),
-                    Switch(
-                      value: onearm,
-                      onChanged: (val) {
-                        setState(() {
-                          onearm = val;
-                        });
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-            ],
+        if (!snap.hasData) {
+          return const Text(
+            'loading timer settings',
+            style: TextStyle(fontSize: 30),
           );
         }
 
-        const displayColors = [
-          Colors.amber,
-          Colors.lightGreen,
-          Colors.lightBlue,
-        ];
+        ts = snap.data!;
+        return StreamBuilder<int>(
+          stream: widget.timer.rawTime,
+          initialData: widget.timer.rawTime.value,
+          builder: (context, snap) {
+            int time = snap.data!;
 
-        return TimerDisplay(
-          displayColors[intervalInfo.stage.index],
-          intervalInfo.stage.name,
-          intervalInfo.timeleft,
-          setLeft,
+            IntervalInfo intervalInfo = getIntervalInfo(time, ts.onearm);
+            int setLeft = ts.nsets - intervalInfo.set;
+
+            if (setLeft == 0 || !widget.timer.isRunning) {
+              widget.timer.onStopTimer();
+              return Column(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  const SizedBox(height: 20),
+                  NumberInput(
+                    nsets_controller,
+                    init: ts.nsets,
+                    label: 'sets',
+                    maxValue: 99,
+                  ),
+                  NumberInput(
+                    prep_controller,
+                    label: 'prepare',
+                    init: ts.prepare ~/ 1000,
+                    timeFormat: true,
+                    maxValue: 208860,
+                  ),
+                  NumberInput(
+                    work_controller,
+                    label: 'work',
+                    init: ts.work ~/ 1000,
+                    timeFormat: true,
+                    maxValue: 208860,
+                  ),
+                  NumberInput(
+                    rest_controller,
+                    label: 'rest',
+                    init: ts.rest ~/ 1000,
+                    timeFormat: true,
+                    maxValue: 208860,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 30),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        const Text(
+                          'one arm',
+                          style: TextStyle(fontSize: 25),
+                        ),
+                        Switch(
+                          value: ts.onearm,
+                          materialTapTargetSize: MaterialTapTargetSize.padded,
+                          onChanged: (val) {
+                            setState(() {
+                              ts.onearm = val;
+                              storeTimerSetting(ts);
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              );
+            }
+
+            const displayColors = [
+              Colors.amber,
+              Colors.lightGreen,
+              Colors.lightBlue,
+            ];
+
+            return TimerDisplay(
+              displayColors[intervalInfo.stage.index],
+              intervalInfo.stage.name,
+              intervalInfo.timeleft,
+              setLeft,
+            );
+          },
         );
       },
     );
@@ -350,7 +408,7 @@ class _NumberInputState extends State<NumberInput> {
                   ),
                 ),
                 onTapDown: (TapDownDetails details) {
-                  timer = Timer.periodic(const Duration(milliseconds: 60), (t) {
+                  timer = Timer.periodic(const Duration(milliseconds: 30), (t) {
                     setState(() {
                       value = max(value - 1, 0);
                       widget.controller.add(value);
@@ -395,7 +453,7 @@ class _NumberInputState extends State<NumberInput> {
                   ),
                 ),
                 onTapDown: (TapDownDetails details) {
-                  timer = Timer.periodic(const Duration(milliseconds: 60), (t) {
+                  timer = Timer.periodic(const Duration(milliseconds: 30), (t) {
                     setState(() {
                       value = min(value + 1, widget.maxValue);
                       widget.controller.add(value);

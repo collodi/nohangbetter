@@ -29,6 +29,10 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  url_launcher:
+  flutter_donation_buttons:
+  device_info:
+  shared_preferences:
   soundpool:
   sprintf:
   stop_watch_timer:
@@ -71,6 +75,7 @@ flutter:
   assets:
     - sounds/beep.wav
     - sounds/doublebeep.wav
+    - images/my_photo.jpg
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware

@@ -51,5 +51,10 @@
     <string>The app uses bluetooth to connect to the smart weight scale</string>
     <key>NSBluetoothPeripheralUsageDescription</key>
     <string>The app uses bluetooth to connect to the smart weight scale</string>
+    <key>LSApplicationQueriesSchemes</key>
+    <array>
+      <string>https</string>
+      <string>http</string>
+    </array>
 </dict>
 </plist>
