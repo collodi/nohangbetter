@@ -17,7 +17,7 @@
     </queries>
 
    <application
-        android:label="nohangpro"
+        android:label="nohangbetter"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

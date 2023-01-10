@@ -88,7 +88,9 @@ class StartPage extends StatelessWidget {
                         '\n\n'
                         'If you like this app, check out my other ideas on my website.'
                         '\n\n'
-                        'If you want to support accessible open-source climbing technologies, please visit my Patreon.',
+                        'For feature requests or bug reports, please open an issue on github.'
+                        '\n\n'
+                        'To contribute to accessible and open-source climbing technologies, consider supporting me on Patreon.',
                   ),
                 ),
               ),
