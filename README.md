@@ -1,3 +1,3 @@
 # nohangbetter
 
-Better hangboarding.
+hangboard smart
