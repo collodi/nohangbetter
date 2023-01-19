@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:device_info/device_info.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_donation_buttons/donationButtons/patreonButton.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
@@ -86,7 +86,7 @@ class StartPage extends StatelessWidget {
                     style: TextStyle(fontSize: 20),
                     text: 'Hi! My name is Willy.'
                         '\n\n'
-                        'If you like this app, check out my other ideas on my website.'
+                        'You need a Xiaomi Mi 2 smart scale for this app. If you like this app, check out my other ideas on my website.'
                         '\n\n'
                         'For feature requests or bug reports, please open an issue on github.'
                         '\n\n'
@@ -113,9 +113,13 @@ class StartPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 30),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 30),
                     child: PatreonButton(
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(50),
+                        backgroundColor: Colors.deepOrange,
+                      ),
                       patreonName: 'willykim',
                       text: 'Support Me On Patreon',
                     ),

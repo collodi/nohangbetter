@@ -1,5 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="kim.willy.nohangpro">
+    xmlns:tools="http://schemas.android.com/tools"
+    package="kim.willy.nohangbetter">
+
+    <uses-permission-sdk-23 android:name="android.permission.ACCESS_FINE_LOCATION" tools:node="remove" />
 
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
@@ -9,7 +12,6 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <queries>
-        <!-- If your app opens https URLs -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
@@ -17,7 +19,7 @@
     </queries>
 
    <application
-        android:label="nohangbetter"
+        android:label="NoHangBetter"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
